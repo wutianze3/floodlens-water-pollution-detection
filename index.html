@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071b21" />
+  <title>FloodLens · Floodwater Visual Screening</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="FloodLens home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 40 40"><path d="M20 4C15 12 9 18 9 25a11 11 0 0 0 22 0c0-7-6-13-11-21Z"/><path class="wave" d="M11 26c4 2 7 2 10 0s6-2 9 0"/></svg>
+      </span>
+      <span>FloodLens</span>
+      <span class="brand-tag">MELBOURNE</span>
+    </a>
+    <nav aria-label="Main navigation">
+      <a class="active" href="#scanner">Field screening</a>
+      <a href="#method">Method</a>
+      <a href="#limits">Limitations</a>
+    </nav>
+    <div class="topbar-actions">
+      <div class="status-pill"><span></span>Vision engine online</div>
+      <button class="language-toggle" id="languageToggle" type="button" aria-label="Switch to Chinese">中文</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="scanner">
+      <div class="hero-copy">
+        <div class="eyebrow"><span>AI VISUAL SCREENING</span><span>01 / FIELD TOOL</span></div>
+        <h1>See the risks<br><em>floodwater leaves.</em></h1>
+        <p>A visual screening tool designed for Melbourne floodwater. Capture or upload a water image to identify visible floating litter and other potential pollution cues.</p>
+        <div class="hero-stats">
+          <div><strong>&lt; 3s</strong><span>Target response</span></div>
+          <div><strong>4</strong><span>Visual risk levels</span></div>
+          <div><strong>24/7</strong><span>Field screening</span></div>
+        </div>
+      </div>
+
+      <div class="scanner-card">
+        <div class="card-header">
+          <div>
+            <span class="step-label">STEP 01</span>
+            <h2>Add a water image</h2>
+          </div>
+          <button class="icon-button" id="resetButton" title="Reset" aria-label="Reset">↻</button>
+        </div>
+
+        <div class="capture-area" id="dropZone">
+          <video id="camera" playsinline autoplay muted hidden></video>
+          <canvas id="captureCanvas" hidden></canvas>
+          <img id="preview" alt="Water image ready for analysis" hidden />
+          <canvas id="detectionCanvas" class="detection-canvas" hidden></canvas>
+          <div class="capture-empty" id="emptyState">
+            <div class="reticle"><span></span><span></span><span></span><span></span><div class="drop-icon">＋</div></div>
+            <h3>Position the water inside the frame</h3>
+            <p>JPG, PNG or WEBP · Include both the water surface and its surroundings</p>
+          </div>
+          <div class="scan-line" id="scanLine"></div>
+          <div class="image-badge" id="imageBadge" hidden>READY · IMAGE LOADED</div>
+        </div>
+
+        <div class="capture-actions">
+          <button class="button secondary" id="cameraButton"><span>◉</span> Open camera</button>
+          <label class="button secondary" for="fileInput"><span>↑</span> Upload image</label>
+          <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+          <button class="button primary" id="analyzeButton" disabled>Analyse image <span>→</span></button>
+        </div>
+        <p class="privacy-note">Images are processed by the local model service and are not retained.</p>
+      </div>
+    </section>
+
+    <section class="result-panel" id="resultPanel" hidden aria-live="polite">
+      <div class="result-summary">
+        <div class="risk-orbit" id="riskOrbit"><span id="scoreValue">--</span><small>RISK SCORE</small></div>
+        <div>
+          <span class="step-label">VISUAL ASSESSMENT</span>
+          <h2 id="resultTitle">Analysis complete</h2>
+          <p id="resultCopy"></p>
+          <div class="confidence-row"><span>Model confidence</span><div><i id="confidenceBar"></i></div><strong id="confidenceText">--</strong></div>
+        </div>
+      </div>
+      <div class="factor-grid" id="factorGrid"></div>
+      <div class="recommendation">
+        <span class="recommendation-icon">!</span>
+        <div><strong>Recommended action</strong><p id="recommendationText"></p></div>
+      </div>
+    </section>
+
+    <section class="method-section" id="method">
+      <div class="section-heading">
+        <span class="step-label">02 / HOW IT WORKS</span>
+        <h2>From one image to<br>an actionable risk alert</h2>
+      </div>
+      <div class="process-grid">
+        <article><span>01</span><div class="process-icon">⌁</div><h3>Image capture</h3><p>Take or upload a water image for automated visual quality checks.</p></article>
+        <article><span>02</span><div class="process-icon">◎</div><h3>Visual detection</h3><p>pLitter YOLOv5 locates visible floating plastic and debris.</p></article>
+        <article><span>03</span><div class="process-icon">≋</div><h3>Risk scoring</h3><p>Detection count, confidence and coverage produce a visual risk score.</p></article>
+        <article><span>04</span><div class="process-icon">↗</div><h3>Action guidance</h3><p>The result is translated into clear sampling and safety recommendations.</p></article>
+      </div>
+    </section>
+
+    <section class="limits-section" id="limits">
+      <div>
+        <span class="step-label">IMPORTANT LIMITATION</span>
+        <h2>A camera can reveal clues.<br>It cannot test water quality.</h2>
+      </div>
+      <p>Clear water may still contain bacteria, heavy metals or dissolved contaminants. This tool provides preliminary visual screening only and must never be used to determine drinking-water safety. Avoid contact with water affected by flooding, sewage or industrial discharge, and arrange professional sampling when contamination is suspected.</p>
+    </section>
+  </main>
+
+  <footer><span>FloodLens · Student Research Prototype</span><span>Visual screening is not a laboratory diagnosis.</span></footer>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
