@@ -5,29 +5,29 @@ const messages = {
     pageTitle: 'FloodLens · Floodwater Visual Screening', fieldScreening: 'Field screening', method: 'Method', limitations: 'Limitations', engineOnline: 'Vision engine online',
     heroTitle: 'See the risks<br><em>floodwater leaves.</em>', heroCopy: 'A visual screening tool designed for Melbourne floodwater. Capture or upload a water image to identify visible floating litter and other potential pollution cues.',
     response: 'Target response', riskLevels: 'Visual risk levels', fieldSupport: 'Field screening', addImage: 'Add a water image', positionWater: 'Position the water inside the frame', fileHint: 'JPG, PNG or WEBP · Include both the water surface and its surroundings',
-    openCamera: 'Open camera', captureImage: 'Capture image', uploadImage: 'Upload image', analyseImage: 'Analyse image', analysing: 'Analysing…', analyseAgain: 'Analyse again', privacy: 'Images are processed by the local model service and are not retained.',
-    riskScore: 'RISK SCORE', complete: 'Analysis complete', modelConfidence: 'Model confidence', recommendedAction: 'Recommended action',
-    methodTitle: 'From one image to<br>an actionable risk alert', imageCapture: 'Image capture', imageCaptureCopy: 'Take or upload a water image for automated visual quality checks.', visualDetection: 'Visual detection', visualDetectionCopy: 'pLitter YOLOv5 locates visible floating plastic and debris.', riskScoring: 'Risk scoring', riskScoringCopy: 'Detection count, confidence and coverage produce a visual risk score.', actionGuidance: 'Action guidance', actionGuidanceCopy: 'The result is translated into clear sampling and safety recommendations.',
+    openCamera: 'Open camera', captureImage: 'Capture image', uploadImage: 'Upload image', analyseImage: 'Analyse image', analysing: 'Analysing…', analyseAgain: 'Analyse again', privacy: 'Images are processed by the local screening service and are not retained.',
+    riskScore: 'RISK SCORE', complete: 'Analysis complete', modelConfidence: 'Screening confidence', recommendedAction: 'Recommended action',
+    methodTitle: 'From one image to<br>an actionable risk alert', imageCapture: 'Image capture', imageCaptureCopy: 'Take or upload a water image for automated visual quality checks.', visualDetection: 'Visual detection', visualDetectionCopy: 'OpenCV colour thresholds and contours locate visible anomaly regions.', riskScoring: 'Risk scoring', riskScoringCopy: 'Anomaly count, colour and turbidity cues produce a visual risk score.', actionGuidance: 'Action guidance', actionGuidanceCopy: 'The result is translated into clear sampling and safety recommendations.',
     limitTitle: 'A camera can reveal clues.<br>It cannot test water quality.', limitCopy: 'Clear water may still contain bacteria, heavy metals or dissolved contaminants. This tool provides preliminary visual screening only and must never be used to determine drinking-water safety. Avoid contact with water affected by flooding, sewage or industrial discharge, and arrange professional sampling when contamination is suspected.',
     reset: 'Reset', previewAlt: 'Water image ready for analysis', switchLanguage: 'Switch to Chinese', badType: 'Choose a JPG, PNG or WEBP image', tooLarge: 'The image must be smaller than 12 MB', noCamera: 'Camera access is not supported by this browser', cameraDenied: 'Unable to open the camera. Check your browser permissions.', imageError: 'The image could not be read. Try another image.',
     floatingDebris: 'floating debris', high: 'High', moderate: 'Moderate', low: 'Low', highTitle: 'High visual risk detected', mediumTitle: 'Moderate visual risk detected', lowTitle: 'No obvious visual pollution detected',
     highCopy: 'The image contains visible cues associated with floodwater pollution. Treat this water as potentially contaminated and avoid direct contact.', mediumCopy: 'Some unusual visual cues are present, but a photograph cannot confirm the type or concentration of any contaminant.', lowCopy: 'No strong visual pollution cues were found. This does not mean the water is drinkable or free from microbial or chemical contamination.',
     highRecommendation: 'Do not enter or drink the water, and keep pets away. Record the location and time, then contact the local council, EPA Victoria or a qualified sampling professional.', mediumRecommendation: 'Capture additional images from different angles and lighting. Combine the result with turbidity, pH, temperature and conductivity readings, and arrange laboratory testing if concerned.', lowRecommendation: 'Continue monitoring. If the area was recently flooded or is near sewage or industrial discharge, still treat the water as potentially contaminated and seek professional testing.',
-    demoNotice: ' This result was produced by the local demonstration algorithm.', turbidity: 'Turbidity cues', debris: 'Floating debris', detected: 'detected', colour: 'Unusual colour', imageQuality: 'Image quality', usable: 'Usable', bottle: 'bottle', styrofoam: 'styrofoam'
+    demoNotice: ' This result was produced by the in-browser fallback.', turbidity: 'Turbidity cues', debris: 'Visible anomalies', detected: 'detected', colour: 'Unusual colour', imageQuality: 'Image quality', usable: 'Usable', bottle: 'bottle', styrofoam: 'styrofoam', visualAnomaly: 'visual anomaly'
   },
   zh: {
     pageTitle: 'FloodLens · 洪水水质视觉筛查', fieldScreening: '现场筛查', method: '方法说明', limitations: '使用边界', engineOnline: '视觉引擎在线',
     heroTitle: '看见洪水留下的<br><em>污染风险。</em>', heroCopy: '面向墨尔本洪水场景的水体视觉筛查工具。拍摄或上传水面照片，识别可见的漂浮垃圾及其他潜在污染线索。',
     response: '目标响应时间', riskLevels: '视觉风险等级', fieldSupport: '现场辅助筛查', addImage: '添加水体图像', positionWater: '将水面置于取景框内', fileHint: '支持 JPG、PNG、WEBP · 建议包含水面与周围环境',
-    openCamera: '开启摄像头', captureImage: '拍摄照片', uploadImage: '上传照片', analyseImage: '开始分析', analysing: '分析中…', analyseAgain: '重新分析', privacy: '图像由本地模型服务处理，不会被保留。',
-    riskScore: '风险分', complete: '分析完成', modelConfidence: '模型置信度', recommendedAction: '下一步建议',
-    methodTitle: '从一张图像到<br>可执行的风险提示', imageCapture: '图像采集', imageCaptureCopy: '现场拍摄或上传水体照片，并自动检查图像质量。', visualDetection: '视觉识别', visualDetectionCopy: 'pLitter YOLOv5 定位可见的漂浮塑料与垃圾。', riskScoring: '风险评分', riskScoringCopy: '结合检测数量、置信度和覆盖面积生成视觉风险分。', actionGuidance: '解释与行动', actionGuidanceCopy: '将检测结果转化为清晰的采样和安全建议。',
+    openCamera: '开启摄像头', captureImage: '拍摄照片', uploadImage: '上传照片', analyseImage: '开始分析', analysing: '分析中…', analyseAgain: '重新分析', privacy: '图像由本地筛查服务处理，不会被保留。',
+    riskScore: '风险分', complete: '分析完成', modelConfidence: '筛查置信度', recommendedAction: '下一步建议',
+    methodTitle: '从一张图像到<br>可执行的风险提示', imageCapture: '图像采集', imageCaptureCopy: '现场拍摄或上传水体照片，并自动检查图像质量。', visualDetection: '视觉识别', visualDetectionCopy: 'OpenCV 颜色阈值与轮廓分析定位可见异常区域。', riskScoring: '风险评分', riskScoringCopy: '结合异常数量、颜色和浑浊线索生成视觉风险分。', actionGuidance: '解释与行动', actionGuidanceCopy: '将检测结果转化为清晰的采样和安全建议。',
     limitTitle: '相机能发现线索，<br>不能替代水质检测。', limitCopy: '清澈的水仍可能含有细菌、重金属或溶解性污染物。本工具只用于初步视觉筛查，不得用于判断饮用安全。若水体受到洪水、污水或工业排放影响，请避免接触并安排专业采样检测。',
     reset: '重置', previewAlt: '待分析的水体照片', switchLanguage: 'Switch to English', badType: '请选择 JPG、PNG 或 WEBP 图片', tooLarge: '图片不能超过 12 MB', noCamera: '当前浏览器不支持摄像头访问', cameraDenied: '无法打开摄像头，请检查浏览器权限。', imageError: '图片读取失败，请换一张照片重试。',
     floatingDebris: '漂浮垃圾', high: '明显', moderate: '中等', low: '较低', highTitle: '检测到较高视觉风险', mediumTitle: '检测到中等视觉风险', lowTitle: '未见明显视觉污染',
     highCopy: '画面呈现多项与洪水污染相关的可见特征。请将该水体视为潜在污染水，避免直接接触。', mediumCopy: '画面中存在部分异常视觉线索，但仅凭照片无法确认污染物类型或浓度。', lowCopy: '当前照片未显示强烈的可见污染线索，但这不代表水体可饮用或不存在微生物、化学污染。',
     highRecommendation: '避免涉水、饮用或让宠物接触；记录地点与时间，并联系当地 council、EPA Victoria 或专业人员进行采样。', mediumRecommendation: '建议从不同角度和光线下补拍，并结合浊度、pH、温度和电导率等传感器数据；可疑时安排实验室检测。', lowRecommendation: '保持观察；若该区域刚经历洪水或靠近污水、工业排放点，仍应按潜在污染水处理并进行专业检测。',
-    demoNotice: ' 当前结果由本地演示算法生成。', turbidity: '浑浊特征', debris: '漂浮垃圾', detected: '处', colour: '异常颜色', imageQuality: '图像质量', usable: '可用', bottle: '塑料瓶', styrofoam: '泡沫塑料'
+    demoNotice: ' 当前结果由浏览器备用算法生成。', turbidity: '浑浊特征', debris: '可见异常', detected: '处', colour: '异常颜色', imageQuality: '图像质量', usable: '可用', bottle: '塑料瓶', styrofoam: '泡沫塑料', visualAnomaly: '可见异常'
   }
 };
 
@@ -215,7 +215,7 @@ function drawDetections(detections = []) {
     const w = (box.x2 - box.x1) * shownWidth;
     const h = (box.y2 - box.y1) * shownHeight;
     const rawLabel = String(box.label || '').toLowerCase();
-    const labelTranslations = { debris: t('floatingDebris'), plastic: t('floatingDebris'), 'plastic litter': t('floatingDebris'), 'floating debris': t('floatingDebris'), bottle: t('bottle'), styrofoam: t('styrofoam') };
+    const labelTranslations = { debris: t('floatingDebris'), plastic: t('floatingDebris'), 'plastic litter': t('floatingDebris'), 'floating debris': t('floatingDebris'), bottle: t('bottle'), styrofoam: t('styrofoam'), 'visual anomaly': t('visualAnomaly') };
     const translatedLabel = currentLanguage === 'zh' ? (labelTranslations[rawLabel] || box.label || t('floatingDebris')) : (box.label || t('floatingDebris'));
     const label = `${translatedLabel} ${Math.round(box.confidence * 100)}%`;
     ctx.strokeStyle = '#d8ff52'; ctx.lineWidth = 2.5;

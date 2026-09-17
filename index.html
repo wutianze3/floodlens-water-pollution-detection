@@ -33,7 +33,7 @@
   <main>
     <section class="hero" id="scanner">
       <div class="hero-copy">
-        <div class="eyebrow"><span>AI VISUAL SCREENING</span><span>01 / FIELD TOOL</span></div>
+        <div class="eyebrow"><span>OPENCV VISUAL SCREENING</span><span>01 / FIELD TOOL</span></div>
         <h1>See the risks<br><em>floodwater leaves.</em></h1>
         <p>A visual screening tool designed for Melbourne floodwater. Capture or upload a water image to identify visible floating litter and other potential pollution cues.</p>
         <div class="hero-stats">
@@ -72,7 +72,7 @@
           <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
           <button class="button primary" id="analyzeButton" disabled>Analyse image <span>→</span></button>
         </div>
-        <p class="privacy-note">Images are processed by the local model service and are not retained.</p>
+        <p class="privacy-note">Images are processed by the local screening service and are not retained.</p>
       </div>
     </section>
 
@@ -83,7 +83,7 @@
           <span class="step-label">VISUAL ASSESSMENT</span>
           <h2 id="resultTitle">Analysis complete</h2>
           <p id="resultCopy"></p>
-          <div class="confidence-row"><span>Model confidence</span><div><i id="confidenceBar"></i></div><strong id="confidenceText">--</strong></div>
+          <div class="confidence-row"><span>Screening confidence</span><div><i id="confidenceBar"></i></div><strong id="confidenceText">--</strong></div>
         </div>
       </div>
       <div class="factor-grid" id="factorGrid"></div>
@@ -100,7 +100,7 @@
       </div>
       <div class="process-grid">
         <article><span>01</span><div class="process-icon">⌁</div><h3>Image capture</h3><p>Take or upload a water image for automated visual quality checks.</p></article>
-        <article><span>02</span><div class="process-icon">◎</div><h3>Visual detection</h3><p>pLitter YOLOv5 locates visible floating plastic and debris.</p></article>
+        <article><span>02</span><div class="process-icon">◎</div><h3>Visual detection</h3><p>OpenCV colour thresholds and contours locate visible anomaly regions.</p></article>
         <article><span>03</span><div class="process-icon">≋</div><h3>Risk scoring</h3><p>Detection count, confidence and coverage produce a visual risk score.</p></article>
         <article><span>04</span><div class="process-icon">↗</div><h3>Action guidance</h3><p>The result is translated into clear sampling and safety recommendations.</p></article>
       </div>

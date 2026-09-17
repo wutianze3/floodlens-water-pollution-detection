@@ -1,102 +1,136 @@
-"""pLitter YOLOv5 inference API for FloodLens.
+"""Lightweight OpenCV visual-screening API for FloodLens.
 
-The model detects visible floating macro-plastic. It does not infer chemical,
-microbiological, or drinking-water safety.
+This service uses deterministic colour thresholds and contour analysis. It is
+designed for a Raspberry Pi demonstration and is not a trained ML model or a
+water-safety test.
 """
 
-from io import BytesIO
-from pathlib import Path
 import os
 
-ROOT = Path(__file__).resolve().parent
-os.environ.setdefault("MPLCONFIGDIR", str(ROOT / ".matplotlib"))
-(ROOT / ".matplotlib").mkdir(exist_ok=True)
-
+import cv2
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from PIL import Image, UnidentifiedImageError
-import torch
+import numpy as np
 
 
-YOLO_ROOT = ROOT / "vendor" / "yolov5"
-WEIGHTS = ROOT / "models" / "pLitterFloat_yolov5s.pt"
-CONFIDENCE = float(os.getenv("PLITTER_CONFIDENCE", "0.18"))
-# pLitter classes have very different false-positive behaviour. The model often
-# mistakes ripples and rocks for debris/styrofoam, so deployment thresholds are
-# deliberately stricter than the candidate-generation threshold above.
-CLASS_THRESHOLDS = {
-    0: float(os.getenv("PLITTER_DEBRIS_THRESHOLD", "0.55")),
-    1: float(os.getenv("PLITTER_BOTTLE_THRESHOLD", "0.65")),
-    2: float(os.getenv("PLITTER_STYROFOAM_THRESHOLD", "0.90")),
-}
+MAX_UPLOAD_BYTES = 12 * 1024 * 1024
+MAX_ANALYSIS_SIDE = int(os.getenv("OPENCV_MAX_SIDE", "960"))
+MAX_DETECTIONS = int(os.getenv("OPENCV_MAX_DETECTIONS", "8"))
 
-app = FastAPI(title="FloodLens pLitter API", version="1.0.0")
-_model = None
+app = FastAPI(title="FloodLens OpenCV API", version="2.0.0")
 
 
-def get_model():
-    global _model
-    if _model is not None:
-        return _model
-    if not WEIGHTS.exists() or not YOLO_ROOT.exists():
-        raise RuntimeError("pLitter weights or YOLOv5 runtime is missing")
-    try:
-        _model = torch.hub.load(
-            str(YOLO_ROOT), "custom", path=str(WEIGHTS), source="local"
-        )
-        _model.conf = CONFIDENCE
-        _model.iou = 0.45
-        _model.max_det = 100
-        return _model
-    except Exception as exc:
-        raise RuntimeError(f"{type(exc).__name__}: {exc}") from exc
+def resize_for_analysis(image: np.ndarray):
+    height, width = image.shape[:2]
+    largest = max(width, height)
+    if largest <= MAX_ANALYSIS_SIDE:
+        return image, 1.0
+    scale = MAX_ANALYSIS_SIDE / largest
+    resized = cv2.resize(image, (round(width * scale), round(height * scale)), interpolation=cv2.INTER_AREA)
+    return resized, scale
 
 
-def inference_windows(width: int, height: int):
-    """Return a full-image window plus overlapping 2x2 crops for small debris."""
-    windows = [(0, 0, width, height)]
-    if min(width, height) < 320:
-        return windows
-    tile_width = min(width, max(320, round(width * 0.62)))
-    tile_height = min(height, max(320, round(height * 0.62)))
-    x_starts = sorted({0, width - tile_width})
-    y_starts = sorted({0, height - tile_height})
-    windows.extend(
-        (x, y, x + tile_width, y + tile_height)
-        for y in y_starts for x in x_starts
-        if (x, y, x + tile_width, y + tile_height) != windows[0]
-    )
-    return windows
+def water_focus_mask(height: int, width: int):
+    """Bias analysis towards the central/lower region where water is expected."""
+    mask = np.zeros((height, width), dtype=np.uint8)
+    polygon = np.array([
+        [round(width * 0.08), round(height * 0.18)],
+        [round(width * 0.92), round(height * 0.18)],
+        [width - 1, height - 1],
+        [0, height - 1],
+    ], dtype=np.int32)
+    cv2.fillConvexPoly(mask, polygon, 255)
+    return mask
 
 
-def box_iou(a, b):
-    intersection = max(0.0, min(a[2], b[2]) - max(a[0], b[0])) * max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
-    area_a = max(0.0, a[2] - a[0]) * max(0.0, a[3] - a[1])
-    area_b = max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
-    union = area_a + area_b - intersection
-    return intersection / union if union else 0.0
+def build_candidate_mask(image: np.ndarray, focus: np.ndarray):
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hue, saturation, value = cv2.split(hsv)
+
+    # Bright, low-saturation objects can represent foam or pale plastic.
+    bright = ((saturation < 52) & (value > 205)).astype(np.uint8) * 255
+
+    # Strong synthetic colours are useful litter cues. Exclude the broad green
+    # range to avoid treating vegetation as plastic.
+    vivid = ((saturation > 135) & (value > 75)).astype(np.uint8) * 255
+    vegetation = ((hue >= 30) & (hue <= 95)).astype(np.uint8) * 255
+    vivid = cv2.bitwise_and(vivid, cv2.bitwise_not(vegetation))
+
+    candidates = cv2.bitwise_or(bright, vivid)
+    candidates = cv2.bitwise_and(candidates, focus)
+    candidates = cv2.medianBlur(candidates, 5)
+    candidates = cv2.morphologyEx(candidates, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    candidates = cv2.morphologyEx(candidates, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+    return candidates, hsv
 
 
-def merge_detections(rows, iou_threshold=0.45):
-    """Apply a second NMS pass after mapping tiled detections to the full image."""
-    kept = []
-    for candidate in sorted(rows, key=lambda row: row[4], reverse=True):
-        if all(box_iou(candidate, existing) < iou_threshold for existing in kept):
-            kept.append(candidate)
-    return kept
+def contour_detections(mask: np.ndarray, original_width: int, original_height: int, scale: float):
+    height, width = mask.shape
+    frame_area = width * height
+    minimum_area = max(55, frame_area * 0.00045)
+    maximum_area = frame_area * 0.075
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    ranked = []
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if not minimum_area <= area <= maximum_area:
+            continue
+        x, y, box_width, box_height = cv2.boundingRect(contour)
+        if box_width < 7 or box_height < 7:
+            continue
+        rectangularity = area / max(1, box_width * box_height)
+        if rectangularity < 0.20:
+            continue
+        area_ratio = area / frame_area
+        confidence = min(0.92, 0.50 + rectangularity * 0.20 + min(area_ratio * 12, 0.22))
+        ranked.append((area, x, y, box_width, box_height, confidence))
+
+    detections = []
+    for area, x, y, box_width, box_height, confidence in sorted(ranked, reverse=True)[:MAX_DETECTIONS]:
+        x1, y1 = x / scale, y / scale
+        x2, y2 = (x + box_width) / scale, (y + box_height) / scale
+        detections.append({
+            "x1": round(max(0.0, x1 / original_width), 5),
+            "y1": round(max(0.0, y1 / original_height), 5),
+            "x2": round(min(1.0, x2 / original_width), 5),
+            "y2": round(min(1.0, y2 / original_height), 5),
+            "confidence": round(float(confidence), 4),
+            "classId": 0,
+            "label": "visual anomaly",
+            "areaRatio": round(float(area / frame_area), 5),
+        })
+    return detections
+
+
+def scene_features(image: np.ndarray, hsv: np.ndarray, focus: np.ndarray, detections):
+    hue, saturation, value = cv2.split(hsv)
+    focused = focus > 0
+    pixel_count = max(1, int(np.count_nonzero(focused)))
+
+    brown = focused & (hue >= 5) & (hue <= 28) & (saturation > 45) & (value > 35)
+    green = focused & (hue >= 30) & (hue <= 90) & (saturation > 55) & (value > 30)
+    brown_ratio = np.count_nonzero(brown) / pixel_count
+    green_ratio = np.count_nonzero(green) / pixel_count
+
+    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    focused_values = grey[focused]
+    contrast = float(np.std(focused_values)) if focused_values.size else 0.0
+    turbidity = min(1.0, brown_ratio * 2.1 + max(0.0, 25.0 - contrast) / 80.0)
+    discoloration = min(1.0, max(brown_ratio * 1.8, green_ratio * 1.25))
+    detected_area = sum(item["areaRatio"] for item in detections)
+    debris = min(1.0, len(detections) / 6.0 + detected_area * 5.0)
+    quality = min(1.0, max(0.15, contrast / 48.0))
+    return turbidity, debris, discoloration, quality
 
 
 @app.get("/health")
 def health():
-    try:
-        model = get_model()
-        return {
-            "status": "ready",
-            "name": "pLitterFloat YOLOv5s",
-            "device": str(next(model.parameters()).device),
-            "confidenceThreshold": CONFIDENCE,
-        }
-    except RuntimeError as exc:
-        return {"status": "error", "detail": str(exc)}
+    return {
+        "status": "ready",
+        "name": "OpenCV threshold screening",
+        "runtime": f"OpenCV {cv2.__version__}",
+        "maxAnalysisSide": MAX_ANALYSIS_SIDE,
+    }
 
 
 @app.post("/analyze")
@@ -104,81 +138,37 @@ async def analyze(image: UploadFile = File(...), context: str = Form("melbourne_
     if image.content_type not in {"image/jpeg", "image/png", "image/webp"}:
         raise HTTPException(415, "Only JPEG, PNG, and WEBP images are supported")
     raw = await image.read()
-    if len(raw) > 12 * 1024 * 1024:
+    if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, "Image exceeds the 12 MB limit")
-    try:
-        source = Image.open(BytesIO(raw)).convert("RGB")
-    except UnidentifiedImageError as exc:
-        raise HTTPException(400, "Invalid image") from exc
+    frame = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        raise HTTPException(400, "Invalid image")
 
-    try:
-        model = get_model()
-        windows = inference_windows(*source.size)
-        crops = [source.crop(window) for window in windows]
-        with torch.inference_mode():
-            results = model(crops, size=640)
-    except RuntimeError as exc:
-        raise HTTPException(503, f"Model could not be loaded: {exc}") from exc
+    original_height, original_width = frame.shape[:2]
+    analysis_frame, scale = resize_for_analysis(frame)
+    height, width = analysis_frame.shape[:2]
+    focus = water_focus_mask(height, width)
+    candidate_mask, hsv = build_candidate_mask(analysis_frame, focus)
+    detections = contour_detections(candidate_mask, original_width, original_height, scale)
+    turbidity, debris, discoloration, quality = scene_features(analysis_frame, hsv, focus, detections)
 
-    width, height = source.size
-    mapped_rows = []
-    for window, tile_result in zip(windows, results.xyxy):
-        offset_x, offset_y = window[0], window[1]
-        for x1, y1, x2, y2, confidence, class_id in tile_result.detach().cpu().tolist():
-            mapped_rows.append([
-                x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y,
-                confidence, class_id,
-            ])
-    candidate_count = len(mapped_rows)
-    filtered_rows = [
-        row for row in mapped_rows
-        if row[4] >= CLASS_THRESHOLDS.get(int(row[5]), 0.65)
-    ]
-    rows = merge_detections(filtered_rows)
-    names = model.names
-    detections = []
-    covered_area = 0.0
-    max_confidence = 0.0
-
-    for x1, y1, x2, y2, confidence, class_id in rows:
-        class_id = int(class_id)
-        label = names[class_id] if isinstance(names, (list, tuple)) else names.get(class_id, "plastic litter")
-        confidence = float(confidence)
-        nx1, ny1 = max(0.0, x1 / width), max(0.0, y1 / height)
-        nx2, ny2 = min(1.0, x2 / width), min(1.0, y2 / height)
-        covered_area += max(0.0, nx2 - nx1) * max(0.0, ny2 - ny1)
-        max_confidence = max(max_confidence, confidence)
-        detections.append({
-            "x1": round(nx1, 5), "y1": round(ny1, 5),
-            "x2": round(nx2, 5), "y2": round(ny2, 5),
-            "confidence": round(confidence, 4),
-            "classId": class_id, "label": str(label),
-        })
-
-    count = len(detections)
-    score = min(95, round(15 + min(count, 5) * 15 + min(covered_area, 0.25) * 160 + max_confidence * 30)) if count else 10
-    confidence = round(max_confidence * 100) if count else 70
+    score = round(min(95, max(5, 8 + turbidity * 34 + debris * 38 + discoloration * 20)))
+    evidence = max(turbidity, debris, discoloration)
+    confidence = round(58 + evidence * 30)
 
     return {
         "score": score,
         "confidence": confidence,
-        "source": "pLitterFloat_yolov5s_v0.1",
-        "modelScope": "visible_floating_plastic_only",
+        "source": "opencv_threshold_v1",
+        "modelScope": "visible_colour_and_contour_screening_only",
+        "method": "deterministic_opencv_not_trained_ml",
         "context": context,
-        "detectionCount": count,
-        "candidateCount": candidate_count,
-        "inferenceMode": "full_image_plus_overlapping_tiles",
-        "tilesProcessed": len(windows),
-        "classThresholds": {
-            "debris": CLASS_THRESHOLDS[0],
-            "bottle": CLASS_THRESHOLDS[1],
-            "styrofoam": CLASS_THRESHOLDS[2],
-        },
+        "detectionCount": len(detections),
         "detections": detections,
         "factors": {
-            "turbidity": 0.0,
-            "debris": round(min(1.0, count / 4 + covered_area * 2), 4),
-            "discoloration": 0.0,
-            "quality": 1.0,
+            "turbidity": round(turbidity, 4),
+            "debris": round(debris, 4),
+            "discoloration": round(discoloration, 4),
+            "quality": round(quality, 4),
         },
     }
