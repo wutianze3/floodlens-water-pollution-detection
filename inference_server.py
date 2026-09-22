@@ -14,7 +14,8 @@ import numpy as np
 
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 MAX_ANALYSIS_SIDE = int(os.getenv("OPENCV_MAX_SIDE", "960"))
-MAX_DETECTIONS = int(os.getenv("OPENCV_MAX_DETECTIONS", "8"))
+MAX_DETECTIONS = int(os.getenv("OPENCV_MAX_DETECTIONS", "3"))
+MIN_SHAPE_CONFIDENCE = float(os.getenv("OPENCV_MIN_SHAPE_CONFIDENCE", "0.64"))
 
 app = FastAPI(title="FloodLens OpenCV API", version="2.0.0")
 
@@ -30,11 +31,11 @@ def resize_for_analysis(image: np.ndarray):
 
 
 def water_focus_mask(height: int, width: int):
-    """Bias analysis towards the central/lower region where water is expected."""
+    """Use a conservative central/lower trapezoid where water is expected."""
     mask = np.zeros((height, width), dtype=np.uint8)
     polygon = np.array([
-        [round(width * 0.08), round(height * 0.18)],
-        [round(width * 0.92), round(height * 0.18)],
+        [round(width * 0.14), round(height * 0.30)],
+        [round(width * 0.86), round(height * 0.30)],
         [width - 1, height - 1],
         [0, height - 1],
     ], dtype=np.int32)
@@ -42,51 +43,82 @@ def water_focus_mask(height: int, width: int):
     return mask
 
 
-def build_candidate_mask(image: np.ndarray, focus: np.ndarray):
+def build_candidate_masks(image: np.ndarray, focus: np.ndarray):
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     hue, saturation, value = cv2.split(hsv)
 
-    # Bright, low-saturation objects can represent foam or pale plastic.
-    bright = ((saturation < 52) & (value > 205)).astype(np.uint8) * 255
+    # Bright, low-saturation objects can represent foam or pale plastic. The
+    # stricter values reduce ordinary water highlights.
+    bright = ((saturation < 45) & (value > 220)).astype(np.uint8) * 255
 
     # Strong synthetic colours are useful litter cues. Exclude the broad green
     # range to avoid treating vegetation as plastic.
-    vivid = ((saturation > 135) & (value > 75)).astype(np.uint8) * 255
-    vegetation = ((hue >= 30) & (hue <= 95)).astype(np.uint8) * 255
-    vivid = cv2.bitwise_and(vivid, cv2.bitwise_not(vegetation))
+    # Limit vivid-colour cues to red/magenta ranges. Broad blue/brown ranges
+    # frequently describe the water itself and otherwise form huge false masks.
+    synthetic_hue = (hue <= 12) | (hue >= 145)
+    vivid = ((saturation > 145) & (value > 90) & synthetic_hue).astype(np.uint8) * 255
+    # Compact blue regions can be bottle caps. Larger blue areas are later
+    # discarded as likely water rather than objects.
+    blue_object = ((hue >= 98) & (hue <= 120) & (saturation > 65) & (value > 50)).astype(np.uint8) * 255
+    vegetation = ((hue >= 30) & (hue <= 95) & (saturation > 45)).astype(np.uint8) * 255
+    vegetation = cv2.dilate(vegetation, np.ones((5, 5), np.uint8), iterations=1)
+    not_vegetation = cv2.bitwise_not(vegetation)
+    bright = cv2.bitwise_and(bright, not_vegetation)
+    vivid = cv2.bitwise_and(vivid, not_vegetation)
+    blue_object = cv2.bitwise_and(blue_object, not_vegetation)
 
-    candidates = cv2.bitwise_or(bright, vivid)
-    candidates = cv2.bitwise_and(candidates, focus)
-    candidates = cv2.medianBlur(candidates, 5)
-    candidates = cv2.morphologyEx(candidates, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-    candidates = cv2.morphologyEx(candidates, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
-    return candidates, hsv
+    def clean(candidate: np.ndarray):
+        candidate = cv2.bitwise_and(candidate, focus)
+        candidate = cv2.medianBlur(candidate, 3)
+        candidate = cv2.morphologyEx(candidate, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        return cv2.morphologyEx(candidate, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+
+    # Keep blue separate so blue water cannot merge with white/red objects.
+    masks = {
+        "primary": clean(cv2.bitwise_or(bright, vivid)),
+        "compact_blue": clean(blue_object),
+    }
+    return masks, hsv
 
 
-def contour_detections(mask: np.ndarray, original_width: int, original_height: int, scale: float):
-    height, width = mask.shape
+def contour_detections(masks: dict[str, np.ndarray], original_width: int, original_height: int, scale: float):
+    height, width = next(iter(masks.values())).shape
     frame_area = width * height
-    minimum_area = max(55, frame_area * 0.00045)
-    maximum_area = frame_area * 0.075
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    minimum_area = max(55, frame_area * 0.00035)
     ranked = []
 
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if not minimum_area <= area <= maximum_area:
-            continue
-        x, y, box_width, box_height = cv2.boundingRect(contour)
-        if box_width < 7 or box_height < 7:
-            continue
-        rectangularity = area / max(1, box_width * box_height)
-        if rectangularity < 0.20:
-            continue
-        area_ratio = area / frame_area
-        confidence = min(0.92, 0.50 + rectangularity * 0.20 + min(area_ratio * 12, 0.22))
-        ranked.append((area, x, y, box_width, box_height, confidence))
+    for mask_name, mask in masks.items():
+        maximum_ratio = 0.003 if mask_name == "compact_blue" else 0.012
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if not minimum_area <= area <= frame_area * maximum_ratio:
+                continue
+            x, y, box_width, box_height = cv2.boundingRect(contour)
+            if box_width < 7 or box_height < 7:
+                continue
+            aspect_ratio = box_width / box_height
+            if not 0.28 <= aspect_ratio <= 3.4:
+                continue
+            border_x = round(width * 0.015)
+            border_y = round(height * 0.015)
+            if x <= border_x or x + box_width >= width - border_x or y + box_height >= height - border_y:
+                continue
+            rectangularity = area / max(1, box_width * box_height)
+            if rectangularity < 0.32:
+                continue
+            hull_area = cv2.contourArea(cv2.convexHull(contour))
+            solidity = area / max(1.0, hull_area)
+            if solidity < 0.62:
+                continue
+            area_ratio = area / frame_area
+            confidence = min(0.90, 0.42 + rectangularity * 0.18 + solidity * 0.16 + min(area_ratio * 8, 0.12))
+            if confidence < MIN_SHAPE_CONFIDENCE:
+                continue
+            ranked.append((confidence, area, x, y, box_width, box_height))
 
     detections = []
-    for area, x, y, box_width, box_height, confidence in sorted(ranked, reverse=True)[:MAX_DETECTIONS]:
+    for confidence, area, x, y, box_width, box_height in sorted(ranked, reverse=True)[:MAX_DETECTIONS]:
         x1, y1 = x / scale, y / scale
         x2, y2 = (x + box_width) / scale, (y + box_height) / scale
         detections.append({
@@ -108,17 +140,17 @@ def scene_features(image: np.ndarray, hsv: np.ndarray, focus: np.ndarray, detect
     pixel_count = max(1, int(np.count_nonzero(focused)))
 
     brown = focused & (hue >= 5) & (hue <= 28) & (saturation > 45) & (value > 35)
-    green = focused & (hue >= 30) & (hue <= 90) & (saturation > 55) & (value > 30)
     brown_ratio = np.count_nonzero(brown) / pixel_count
-    green_ratio = np.count_nonzero(green) / pixel_count
 
     grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     focused_values = grey[focused]
     contrast = float(np.std(focused_values)) if focused_values.size else 0.0
-    turbidity = min(1.0, brown_ratio * 2.1 + max(0.0, 25.0 - contrast) / 80.0)
-    discoloration = min(1.0, max(brown_ratio * 1.8, green_ratio * 1.25))
+    turbidity = min(1.0, brown_ratio * 1.7 + max(0.0, 18.0 - contrast) / 100.0)
+    # Green scenery is no longer treated as pollution; it caused false risk
+    # scores in natural river scenes.
+    discoloration = min(1.0, brown_ratio * 1.5)
     detected_area = sum(item["areaRatio"] for item in detections)
-    debris = min(1.0, len(detections) / 6.0 + detected_area * 5.0)
+    debris = min(1.0, len(detections) / 4.0 + detected_area * 4.0)
     quality = min(1.0, max(0.15, contrast / 48.0))
     return turbidity, debris, discoloration, quality
 
@@ -130,6 +162,7 @@ def health():
         "name": "OpenCV threshold screening",
         "runtime": f"OpenCV {cv2.__version__}",
         "maxAnalysisSide": MAX_ANALYSIS_SIDE,
+        "maxDetections": MAX_DETECTIONS,
     }
 
 
@@ -148,8 +181,8 @@ async def analyze(image: UploadFile = File(...), context: str = Form("melbourne_
     analysis_frame, scale = resize_for_analysis(frame)
     height, width = analysis_frame.shape[:2]
     focus = water_focus_mask(height, width)
-    candidate_mask, hsv = build_candidate_mask(analysis_frame, focus)
-    detections = contour_detections(candidate_mask, original_width, original_height, scale)
+    candidate_masks, hsv = build_candidate_masks(analysis_frame, focus)
+    detections = contour_detections(candidate_masks, original_width, original_height, scale)
     turbidity, debris, discoloration, quality = scene_features(analysis_frame, hsv, focus, detections)
 
     score = round(min(95, max(5, 8 + turbidity * 34 + debris * 38 + discoloration * 20)))
@@ -159,7 +192,7 @@ async def analyze(image: UploadFile = File(...), context: str = Form("melbourne_
     return {
         "score": score,
         "confidence": confidence,
-        "source": "opencv_threshold_v1",
+        "source": "opencv_threshold_v2_conservative",
         "modelScope": "visible_colour_and_contour_screening_only",
         "method": "deterministic_opencv_not_trained_ml",
         "context": context,

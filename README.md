@@ -40,7 +40,8 @@ node server.mjs
 - Responsive English/Chinese interface with a persistent language switcher.
 - Image upload, drag and drop, live camera capture and preview.
 - Lightweight OpenCV colour, brightness and contour screening.
-- Bounding boxes for bright or unusually coloured visual regions.
+- Conservative water-region, vegetation and contour-shape filtering to reduce false positives.
+- Up to three bounding boxes for the strongest bright or unusually coloured regions.
 - Visual turbidity, discolouration, anomaly and image-quality indicators.
 - Local risk scoring and safety recommendations.
 - Browser fallback if the OpenCV service is unavailable.
@@ -52,7 +53,7 @@ node server.mjs
 {
   "score": 48,
   "confidence": 73,
-  "source": "opencv_threshold_v1",
+  "source": "opencv_threshold_v2_conservative",
   "method": "deterministic_opencv_not_trained_ml",
   "detectionCount": 1,
   "detections": [
